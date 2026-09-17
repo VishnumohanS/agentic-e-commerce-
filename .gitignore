@@ -1,0 +1,44 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+
+# Databases and generated data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+data/embedding_cache.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environments
+venv/
+.venv/
+env/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Packaging
+*.zip
+!agentic-commerce-platform.zip
+
+# Infrastructure
+cdk.out/
+.terraform/

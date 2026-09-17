@@ -1,0 +1,490 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Agentic Commerce Platform - minimal, cost-conscious AWS stack.
+  Creates the DynamoDB audit ledger, Secrets Manager secret, ECR repositories,
+  CloudWatch log groups, IAM task roles and an ECS Fargate service pair behind
+  an Application Load Balancer.
+
+  Deliberately excluded: NAT gateways (tasks run in public subnets with public
+  IPs), QLDB (application-level hash chaining already provides tamper evidence),
+  SQS/EventBridge (the pipeline is synchronous by design so that inventory is
+  always checked before payment).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: acp
+    Description: Prefix applied to every resource name.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for the ECS services (your default VPC is fine).
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two or more public subnets in different availability zones.
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-5-sonnet-20240620-v1:0
+  BedrockEmbeddingModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+  TaskCpu:
+    Type: String
+    Default: "256"
+    AllowedValues: ["256", "512", "1024"]
+  TaskMemory:
+    Type: String
+    Default: "512"
+    AllowedValues: ["512", "1024", "2048"]
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: Set to 0 to stop all tasks and stop incurring Fargate charges.
+  ImageTag:
+    Type: String
+    Default: latest
+
+Resources:
+  # --- Audit ledger --------------------------------------------------------
+  # On-demand billing: you pay per request, nothing when idle.
+  AuditLedgerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-audit-ledger"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: chain_id
+          AttributeType: S
+        - AttributeName: sequence
+          AttributeType: N
+        - AttributeName: transaction_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: chain_id
+          KeyType: HASH
+        - AttributeName: sequence
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: transaction_id-index
+          KeySchema:
+            - AttributeName: transaction_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      DeletionProtectionEnabled: false
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # --- Secrets -------------------------------------------------------------
+  # Values are placeholders; fill them in after deployment (see SETUP.md).
+  AppSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/app"
+      Description: Razorpay test keys, AP2 mandate secret and the A2A shared key.
+      SecretString: >-
+        {"RAZORPAY_KEY_ID":"replace_me","RAZORPAY_KEY_SECRET":"replace_me",
+        "RAZORPAY_WEBHOOK_SECRET":"replace_me","AP2_MANDATE_SECRET":"replace_me",
+        "A2A_API_KEY":"replace_me"}
+
+  # --- Container registries ------------------------------------------------
+  MerchantRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-merchant-agent"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep 5 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":5},
+          "action":{"type":"expire"}}]}
+
+  BuyerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-buyer-agent"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep 5 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":5},
+          "action":{"type":"expire"}}]}
+
+  # --- Logging -------------------------------------------------------------
+  MerchantLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ProjectName}/merchant-agent"
+      RetentionInDays: 14
+
+  BuyerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ProjectName}/buyer-agent"
+      RetentionInDays: 14
+
+  PaymentFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-payment-verification-failures"
+      AlarmDescription: Fires when payment verification starts failing repeatedly.
+      Namespace: !Sub "${ProjectName}/commerce"
+      MetricName: PaymentVerificationFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  PaymentFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref MerchantLogGroup
+      FilterPattern: '{ $.error_code = "payment_signature_invalid" || $.error_code = "payment_not_captured" }'
+      MetricTransformations:
+        - MetricNamespace: !Sub "${ProjectName}/commerce"
+          MetricName: PaymentVerificationFailures
+          MetricValue: "1"
+          DefaultValue: 0
+
+  MandateRejectionMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref MerchantLogGroup
+      FilterPattern: '{ $.error_code = "mandate_*" }'
+      MetricTransformations:
+        - MetricNamespace: !Sub "${ProjectName}/commerce"
+          MetricName: MandateRejections
+          MetricValue: "1"
+          DefaultValue: 0
+
+  # --- IAM -----------------------------------------------------------------
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ecs-execution"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: read-app-secret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AppSecret
+
+  # Least privilege: only the two Bedrock models, only this DynamoDB table.
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ecs-task"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: bedrock-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:Converse
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockEmbeddingModelId}"
+        - PolicyName: ledger-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # No DeleteItem or UpdateItem: the ledger is append-only by design.
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt AuditLedgerTable.Arn
+                  - !Sub "${AuditLedgerTable.Arn}/index/*"
+        - PolicyName: secrets-read
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref AppSecret
+        - PolicyName: cloudwatch-metrics
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: !Sub "${ProjectName}/commerce"
+
+  # --- Networking ----------------------------------------------------------
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTP access to the buyer agent UI.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Public HTTP
+
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Agent tasks. Merchant is reachable only from inside the group.
+      VpcId: !Ref VpcId
+
+  BuyerFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8001
+      ToPort: 8001
+      SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+      Description: Buyer agent from the load balancer
+
+  MerchantFromBuyer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ServiceSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId: !Ref ServiceSecurityGroup
+      Description: Merchant agent from the buyer agent only
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ProjectName}-alb"
+      Scheme: internet-facing
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+
+  BuyerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${ProjectName}-buyer-tg"
+      Port: 8001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BuyerTargetGroup
+
+  # --- Service discovery ---------------------------------------------------
+  ServiceNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Sub "${ProjectName}.local"
+      Vpc: !Ref VpcId
+
+  MerchantDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: merchant
+      NamespaceId: !GetAtt ServiceNamespace.Id
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 60
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  # --- ECS -----------------------------------------------------------------
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ProjectName}-cluster"
+
+  MerchantTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ProjectName}-merchant-agent"
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: merchant-agent
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-merchant-agent:${ImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+          Environment:
+            - Name: ENVIRONMENT
+              Value: production
+            - Name: LOG_FORMAT
+              Value: json
+            - Name: AI_PROVIDER
+              Value: bedrock
+            - Name: RAZORPAY_MODE
+              Value: test
+            - Name: LEDGER_BACKEND
+              Value: dynamodb
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: BEDROCK_MODEL_ID
+              Value: !Ref BedrockModelId
+            - Name: BEDROCK_EMBEDDING_MODEL_ID
+              Value: !Ref BedrockEmbeddingModelId
+            - Name: DYNAMODB_TABLE_NAME
+              Value: !Ref AuditLedgerTable
+            - Name: SECRETS_MANAGER_SECRET_NAME
+              Value: !Sub "${ProjectName}/app"
+            - Name: PORT
+              Value: "8000"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MerchantLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: merchant
+
+  BuyerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ProjectName}-buyer-agent"
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: buyer-agent
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-buyer-agent:${ImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8001
+          Command:
+            - uvicorn
+            - buyer_agent.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8001"
+          Environment:
+            - Name: ENVIRONMENT
+              Value: production
+            - Name: LOG_FORMAT
+              Value: json
+            - Name: AI_PROVIDER
+              Value: bedrock
+            - Name: LEDGER_BACKEND
+              Value: dynamodb
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: BEDROCK_MODEL_ID
+              Value: !Ref BedrockModelId
+            - Name: BEDROCK_EMBEDDING_MODEL_ID
+              Value: !Ref BedrockEmbeddingModelId
+            - Name: DYNAMODB_TABLE_NAME
+              Value: !Ref AuditLedgerTable
+            - Name: SECRETS_MANAGER_SECRET_NAME
+              Value: !Sub "${ProjectName}/app"
+            - Name: MERCHANT_AGENT_URL
+              Value: !Sub "http://merchant.${ProjectName}.local:8000"
+            - Name: PORT
+              Value: "8001"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BuyerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: buyer
+
+  MerchantService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${ProjectName}-merchant-agent"
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref MerchantTaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref ServiceSecurityGroup
+      ServiceRegistries:
+        - RegistryArn: !GetAtt MerchantDiscovery.Arn
+
+  BuyerService:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      ServiceName: !Sub "${ProjectName}-buyer-agent"
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref BuyerTaskDefinition
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref ServiceSecurityGroup
+      LoadBalancers:
+        - ContainerName: buyer-agent
+          ContainerPort: 8001
+          TargetGroupArn: !Ref BuyerTargetGroup
+
+Outputs:
+  ApplicationUrl:
+    Description: Buyer agent UI.
+    Value: !Sub "http://${LoadBalancer.DNSName}"
+  MerchantRepositoryUri:
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-merchant-agent"
+  BuyerRepositoryUri:
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}-buyer-agent"
+  LedgerTableName:
+    Value: !Ref AuditLedgerTable
+  SecretName:
+    Description: Fill this secret in before the tasks will start successfully.
+    Value: !Sub "${ProjectName}/app"

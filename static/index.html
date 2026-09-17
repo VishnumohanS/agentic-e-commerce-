@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Commerce Platform</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232d;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --accent: #5b9dff;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --err: #f85149;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 15px; line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .status { margin-left: auto; font-size: 12px; font-family: var(--mono); color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--err); }
+
+  form { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; flex-wrap: wrap; }
+  input, button {
+    font: inherit; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); padding: 10px 14px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #request { flex: 1 1 380px; }
+  #budget { width: 150px; }
+  button {
+    background: var(--accent); border-color: var(--accent); color: #06121f;
+    font-weight: 600; cursor: pointer; min-width: 130px;
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+
+  .examples { padding: 0 24px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .examples span { color: var(--muted); font-size: 12px; }
+  .chip {
+    font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); min-height: 55vh; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--bg); padding: 20px 24px; }
+  h2 { font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+
+  .step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .step:last-child { border-bottom: none; }
+  .badge {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    padding: 3px 7px; border-radius: 5px; height: fit-content; white-space: nowrap;
+    background: rgba(91,157,255,.14); color: var(--accent);
+  }
+  .badge.ok { background: rgba(63,185,80,.14); color: var(--ok); }
+  .badge.rejected, .badge.pending, .badge.skipped { background: rgba(210,153,34,.14); color: var(--warn); }
+  .badge.failed { background: rgba(248,81,73,.14); color: var(--err); }
+  .step .body { flex: 1; min-width: 0; }
+  .step .stage { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .step .msg { word-wrap: break-word; }
+  .placeholder { color: var(--muted); font-style: italic; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 15px; }
+  .card .price { font-size: 22px; font-weight: 600; }
+  .card .meta { color: var(--muted); font-size: 13px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 14px; }
+  .row .k { color: var(--muted); }
+  .row .v { font-family: var(--mono); text-align: right; word-break: break-all; }
+
+  .meter { height: 8px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
+  .meter > div { height: 100%; background: var(--accent); width: 0; transition: width .4s ease; }
+  .meter.over > div { background: var(--err); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-family: var(--mono); }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  td.hash { color: var(--muted); }
+  .ledger-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .verify { font-size: 12px; font-family: var(--mono); }
+  .verify.valid { color: var(--ok); }
+  .verify.invalid { color: var(--err); }
+  .scroll { max-height: 320px; overflow: auto; }
+  footer { padding: 14px 24px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agentic Commerce Platform</h1>
+  <span class="sub">Buyer Agent &middot; A2A &middot; MCP/UCP &middot; AP2 mandate &middot; Razorpay test mode</span>
+  <span class="status"><span id="dot" class="dot"></span><span id="statusText">checking…</span></span>
+</header>
+
+<form id="form">
+  <input id="request" placeholder="e.g. I need good wireless headphones under 2500 rupees" required
+         maxlength="1000" autocomplete="off">
+  <input id="budget" type="number" min="1" step="1" placeholder="Budget (₹)">
+  <button id="go" type="submit">Start purchase</button>
+</form>
+
+<div class="examples">
+  <span>Try:</span>
+  <button type="button" class="chip">wireless headphones under 2500 rupees</button>
+  <button type="button" class="chip">cheap bluetooth headphones for commuting</button>
+  <button type="button" class="chip">a portable speaker under 300 rupees</button>
+</div>
+
+<main>
+  <section>
+    <h2>Agent reasoning</h2>
+    <div id="steps"><p class="placeholder">Enter a request above to watch the agents negotiate.</p></div>
+  </section>
+
+  <section>
+    <h2>Transaction</h2>
+    <div id="summary"><p class="placeholder">No transaction yet.</p></div>
+  </section>
+</main>
+
+<section>
+  <div class="ledger-head">
+    <h2 style="margin:0">Audit ledger (hash-chained)</h2>
+    <span id="verify" class="verify"></span>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Event</th><th>Actor</th><th>Hash</th></tr>
+      </thead>
+      <tbody id="ledger">
+        <tr><td colspan="4" class="placeholder">Complete a purchase to populate the ledger.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  Amounts are in Indian rupees. Payments run in Razorpay test mode or an offline simulator &mdash; no real money moves.
+  Spending limits are enforced in deterministic code, never by the language model.
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const rupees = (paise) => "₹" + (paise / 100).toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function health() {
+  try {
+    const r = await fetch("/health");
+    const b = await r.json();
+    const mode = (b.payments && b.payments.mode) ? b.payments.mode : "mock";
+    const aiProvider = (b.ai && b.ai.provider) ? b.ai.provider : "mock";
+    $("dot").className = "dot on";
+    $("statusText").textContent = `${aiProvider} · ${mode} mode`;
+  } catch {
+    $("dot").className = "dot off";
+    $("statusText").textContent = "agent offline";
+  }
+}
+
+function addStep(step) {
+  const list = $("steps");
+  if (list.querySelector(".placeholder")) list.innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "step";
+  el.innerHTML =
+    `<span class="badge ${esc(step.status)}">${esc(step.status)}</span>` +
+    `<div class="body"><div class="stage">${esc(step.stage)}</div>` +
+    `<div class="msg">${esc(step.message)}</div></div>`;
+  list.appendChild(el);
+  el.scrollIntoView({block: "nearest", behavior: "smooth"});
+}
+
+function renderSummary(outcome) {
+  const parts = [];
+  const product = outcome.product;
+  const mandate = outcome.mandate;
+  const upsell = outcome.upsell || {};
+  const confirmation = outcome.confirmation;
+  const charged = confirmation ? confirmation.amount : (outcome.order ? outcome.order.amount : 0);
+
+  if (product) {
+    parts.push(
+      `<div class="card"><h3>${esc(product.name)}</h3>` +
+      `<div class="meta">${esc(product.category)} · ${esc(product.brand || "")}</div>` +
+      `<div class="price">${rupees(product.price)}</div></div>`
+    );
+  }
+
+  if (mandate) {
+    const used = charged || 0;
+    const pct = Math.min(100, Math.round((used / mandate.maximum_amount) * 100));
+    parts.push(
+      `<div class="card"><h3>AP2 spending mandate</h3>` +
+      `<div class="meter${used > mandate.maximum_amount ? " over" : ""}"><div style="width:${pct}%"></div></div>` +
+      `<div class="row"><span class="k">Spent of limit</span><span class="v">${rupees(used)} / ${rupees(mandate.maximum_amount)}</span></div>` +
+      `<div class="row"><span class="k">Mandate ID</span><span class="v">${esc(mandate.mandate_id)}</span></div>` +
+      `<div class="row"><span class="k">Scope</span><span class="v">${esc((mandate.allowed_categories || []).join(", ") || "any category")}</span></div>` +
+      `<div class="row"><span class="k">Expires</span><span class="v">${esc(mandate.expires_at)}</span></div></div>`
+    );
+  }
+
+  if (upsell.offer) {
+    parts.push(
+      `<div class="card"><h3>Upsell decision</h3>` +
+      `<div class="row"><span class="k">${esc(upsell.offer.name)}</span><span class="v">${rupees(upsell.offer.price)}</span></div>` +
+      `<div class="row"><span class="k">Decision</span><span class="v">${upsell.accepted ? "accepted" : "rejected — " + esc(upsell.reason)}</span></div>` +
+      `<div class="row"><span class="k">Basket if accepted</span><span class="v">${rupees(upsell.base_total + upsell.offer.price * upsell.offer.quantity)} vs limit ${rupees(upsell.mandate_maximum)}</span></div></div>`
+    );
+  }
+
+  const status = outcome.status;
+  parts.push(
+    `<div class="card"><h3>Transaction</h3>` +
+    `<div class="row"><span class="k">Status</span><span class="v">${esc(status)}</span></div>` +
+    `<div class="row"><span class="k">Transaction ID</span><span class="v">${esc(outcome.transaction_id)}</span></div>` +
+    (outcome.order ? `<div class="row"><span class="k">Razorpay order</span><span class="v">${esc(outcome.order.order_id)}</span></div>` : "") +
+    (confirmation ? `<div class="row"><span class="k">Payment ID</span><span class="v">${esc(confirmation.payment_id)}</span></div>` : "") +
+    (charged ? `<div class="row"><span class="k">Charged</span><span class="v">${rupees(charged)}</span></div>` : "") +
+    (outcome.error ? `<div class="row"><span class="k">Reason</span><span class="v">${esc(outcome.error.message)}</span></div>` : "") +
+    `</div>`
+  );
+
+  $("summary").innerHTML = parts.join("");
+}
+
+async function loadLedger(transactionId) {
+  try {
+    const url = transactionId ? `/ledger/events?transaction_id=${encodeURIComponent(transactionId)}` : "/ledger/events?limit=25";
+    const [events, verification] = await Promise.all([
+      fetch(url).then((r) => r.json()),
+      fetch("/ledger/verify").then((r) => r.json()),
+    ]);
+    const badge = $("verify");
+    badge.className = "verify " + (verification.valid ? "valid" : "invalid");
+    badge.textContent = verification.valid
+      ? `chain verified · ${verification.events_checked} events`
+      : `TAMPERING DETECTED · ${verification.reason}`;
+
+    const rows = events.events.map((e) =>
+      `<tr><td>${e.sequence}</td><td>${esc(e.event_type)}</td><td>${esc(e.actor)}</td>` +
+      `<td class="hash">${esc(e.current_hash.slice(0, 16))}…</td></tr>`
+    );
+    $("ledger").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="4" class="placeholder">No events.</td></tr>`;
+  } catch {
+    $("verify").textContent = "";
+  }
+}
+
+$("form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("go");
+  button.disabled = true;
+  button.textContent = "Working…";
+  $("steps").innerHTML = "";
+  $("summary").innerHTML = `<p class="placeholder">Purchase in progress…</p>`;
+
+  const payload = {request: $("request").value, auto_pay: true};
+  const budget = parseFloat($("budget").value);
+  if (!Number.isNaN(budget) && budget > 0) payload.budget = budget;
+
+  try {
+    const response = await fetch("/purchase/stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let outcome = null;
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop();
+      for (const chunk of chunks) {
+        const eventLine = chunk.match(/^event: (.+)$/m);
+        const dataLine = chunk.match(/^data: (.+)$/m);
+        if (!eventLine || !dataLine) continue;
+        const data = JSON.parse(dataLine[1]);
+        if (eventLine[1] === "step") addStep(data);
+        else outcome = data;
+      }
+    }
+
+    if (outcome) {
+      renderSummary(outcome);
+      await loadLedger(outcome.transaction_id);
+    }
+  } catch (error) {
+    addStep({stage: "client", status: "failed", message: "Could not reach the buyer agent."});
+  } finally {
+    button.disabled = false;
+    button.textContent = "Start purchase";
+  }
+});
+
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => { $("request").value = chip.textContent; $("request").focus(); });
+});
+
+health();
+loadLedger();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Core web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# HTTP client (A2A transport)
+httpx==0.28.1
+
+# AWS SDK - Bedrock, DynamoDB, Secrets Manager, KMS
+boto3==1.35.90
+botocore==1.35.90
+
+# Payments
+razorpay==1.4.2
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0

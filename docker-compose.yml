@@ -1,0 +1,45 @@
+# Optional convenience runner. Docker is NOT required - see SETUP.md for the
+# plain virtualenv instructions.
+#
+#   docker compose up --build
+#   UI: http://localhost:8001
+
+services:
+  merchant-agent:
+    build: .
+    command: uvicorn merchant_agent.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      DATABASE_URL: sqlite:///./data/merchant_ledger.db
+    volumes:
+      - merchant-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  buyer-agent:
+    build: .
+    command: uvicorn buyer_agent.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      PORT: "8001"
+      MERCHANT_AGENT_URL: http://merchant-agent:8000
+      BUYER_DATABASE_URL: sqlite:///./data/buyer_ledger.db
+    volumes:
+      - buyer-data:/app/data
+    depends_on:
+      merchant-agent:
+        condition: service_healthy
+
+volumes:
+  merchant-data:
+  buyer-data:

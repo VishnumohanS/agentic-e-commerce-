@@ -1,0 +1,41 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build / generated files
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Local database / generated data
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker local overrides
+docker-compose.override.yml

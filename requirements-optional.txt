@@ -1,0 +1,3 @@
+# Optional: the stdio MCP server (merchant_agent/mcp/server.py).
+# The HTTP MCP endpoint (POST /mcp) works without this.
+mcp>=1.2.0

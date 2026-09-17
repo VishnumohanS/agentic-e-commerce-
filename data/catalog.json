@@ -1,0 +1,133 @@
+{
+  "merchant": {
+    "merchant_id": "mrc_demo_electronics",
+    "name": "Nimbus Electronics",
+    "currency": "INR",
+    "url": "https://nimbus-electronics.example.com"
+  },
+  "products": [
+    {
+      "product_id": "prd_hp_001",
+      "name": "AuraSound X200 Wireless Headphones",
+      "description": "Over-ear bluetooth headphones with active noise cancellation, 40 hour battery and a low-latency gaming mode.",
+      "price": 149900,
+      "currency": "INR",
+      "category": "audio",
+      "brand": "AuraSound",
+      "inventory": 12,
+      "tags": ["headphones", "wireless", "anc", "bluetooth", "over-ear"],
+      "metadata": {"warranty_months": 12, "colour": "midnight"}
+    },
+    {
+      "product_id": "prd_hp_002",
+      "name": "AuraSound Lite Bluetooth Headphones",
+      "description": "Lightweight on-ear bluetooth headphones with 24 hour battery, ideal for commuting and calls.",
+      "price": 79900,
+      "currency": "INR",
+      "category": "audio",
+      "brand": "AuraSound",
+      "inventory": 30,
+      "tags": ["headphones", "wireless", "bluetooth", "budget", "on-ear"],
+      "metadata": {"warranty_months": 12, "colour": "graphite"}
+    },
+    {
+      "product_id": "prd_eb_003",
+      "name": "PulseBeat Pro Earbuds",
+      "description": "True wireless earbuds with adaptive noise cancellation, wireless charging case and IPX5 splash resistance.",
+      "price": 119900,
+      "currency": "INR",
+      "category": "audio",
+      "brand": "PulseBeat",
+      "inventory": 0,
+      "tags": ["earbuds", "wireless", "anc", "tws"],
+      "metadata": {"warranty_months": 12, "note": "temporarily out of stock"}
+    },
+    {
+      "product_id": "prd_sp_004",
+      "name": "Nimbus Boom Portable Speaker",
+      "description": "Rugged portable bluetooth speaker with 360 degree sound and 18 hour playback.",
+      "price": 449900,
+      "currency": "INR",
+      "category": "audio",
+      "brand": "Nimbus",
+      "inventory": 7,
+      "tags": ["speaker", "portable", "bluetooth"],
+      "metadata": {"warranty_months": 24}
+    },
+    {
+      "product_id": "prd_ac_005",
+      "name": "AuraSound Hard Carry Case",
+      "description": "Moulded protective travel case sized for AuraSound over-ear and on-ear headphones.",
+      "price": 49900,
+      "currency": "INR",
+      "category": "accessories",
+      "brand": "AuraSound",
+      "inventory": 40,
+      "upsell_for": ["prd_hp_001", "prd_hp_002"],
+      "tags": ["case", "accessory", "travel", "protection"],
+      "metadata": {"warranty_months": 6}
+    },
+    {
+      "product_id": "prd_ac_006",
+      "name": "Braided USB-C Charging Cable 2m",
+      "description": "Durable braided USB-C to USB-C cable supporting 100W power delivery.",
+      "price": 29900,
+      "currency": "INR",
+      "category": "accessories",
+      "brand": "Nimbus",
+      "inventory": 100,
+      "upsell_for": ["prd_hp_001", "prd_hp_002", "prd_eb_003", "prd_sp_004"],
+      "tags": ["cable", "usb-c", "charging", "accessory"],
+      "metadata": {"warranty_months": 6}
+    },
+    {
+      "product_id": "prd_ac_007",
+      "name": "Extended Warranty Plan (24 months)",
+      "description": "Adds two years of accidental damage and component cover to any audio purchase.",
+      "price": 89900,
+      "currency": "INR",
+      "category": "services",
+      "brand": "Nimbus Care",
+      "inventory": 999,
+      "upsell_for": ["prd_hp_001", "prd_sp_004"],
+      "tags": ["warranty", "protection", "service"],
+      "metadata": {"duration_months": 24}
+    },
+    {
+      "product_id": "prd_wr_008",
+      "name": "ChronoFit 3 Smartwatch",
+      "description": "Fitness smartwatch with GPS, heart-rate tracking, SpO2 and a seven day battery.",
+      "price": 699900,
+      "currency": "INR",
+      "category": "wearables",
+      "brand": "ChronoFit",
+      "inventory": 15,
+      "tags": ["smartwatch", "fitness", "gps", "wearable"],
+      "metadata": {"warranty_months": 12}
+    },
+    {
+      "product_id": "prd_cm_009",
+      "name": "Nimbus 7-in-1 USB-C Hub",
+      "description": "Aluminium USB-C hub with HDMI 4K, ethernet, SD card reader and 100W pass-through charging.",
+      "price": 259900,
+      "currency": "INR",
+      "category": "computing",
+      "brand": "Nimbus",
+      "inventory": 22,
+      "tags": ["hub", "usb-c", "laptop", "dock"],
+      "metadata": {"warranty_months": 18}
+    },
+    {
+      "product_id": "prd_cm_010",
+      "name": "Nimbus Mechanical Keyboard 75%",
+      "description": "Hot-swappable 75 percent mechanical keyboard with tactile switches and bluetooth plus USB-C.",
+      "price": 549900,
+      "currency": "INR",
+      "category": "computing",
+      "brand": "Nimbus",
+      "inventory": 9,
+      "tags": ["keyboard", "mechanical", "bluetooth", "computing"],
+      "metadata": {"warranty_months": 12}
+    }
+  ]
+}
